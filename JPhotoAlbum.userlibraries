@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<eclipse-userlibraries>
+  <library name="lib">
+    <archive path="/Users/robert/dev/475-labs/475-lab2-skeleton/lib/metadata-extractor-2.2.2.jar" />
+    <archive path="/Users/robert/dev/475-labs/475-lab2-skeleton/lib/JPhotoAlbum.jar" />
+    <archive path="/Users/robert/dev/475-labs/475-lab2-skeleton/lib/xerces.jar" />
+    <archive path="/Users/robert/dev/475-labs/475-lab2-skeleton/lib/castor.jar" />
+    <archive path="/Users/robert/dev/475-labs/475-lab2-skeleton/lib/xalan.jar" />
+  </library>
+</eclipse-userlibraries>
+
