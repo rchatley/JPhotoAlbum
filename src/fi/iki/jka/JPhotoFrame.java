@@ -546,7 +546,7 @@ public class JPhotoFrame extends JFrame
         else if (cmd.equals(JPhotoMenu.A_WATERMARK)) {
             String def = photos.getWatermark();
             if (def.equals(""))
-                def = "© "+Calendar.getInstance().get(Calendar.YEAR)+" ";
+                def = "ï¿½ "+Calendar.getInstance().get(Calendar.YEAR)+" ";
             String res = JOptionPane.showInputDialog(this, "Watermark",
                                                      def);
             if (res!=null)
@@ -596,7 +596,7 @@ public class JPhotoFrame extends JFrame
             JOptionPane.showMessageDialog(this, APP_NAME+" v1.4.5 - Organize and Publish Your Digital Photos.\n"+
                                           "Copyright 2005-2007 Jari Karjala [www.jpkware.com],\n"
                                           +"Tarja Hakala [www.hakalat.net]"
-                                          +" and Zbynek Mužík [zbynek.muzik@email.cz]\n"
+                                          +" and Zbynek Muzik [zbynek.muzik@email.cz]\n"
                                           +"This is free software, licenced under the GNU General Public License.",
                                           JPhotoMenu.A_ABOUT, JOptionPane.INFORMATION_MESSAGE);
         }
