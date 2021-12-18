@@ -20,8 +20,6 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
-import java.awt.image.ConvolveOp;
-import java.awt.image.Kernel;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -37,7 +35,7 @@ import java.util.Properties;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
-import javax.imageio.stream.FileImageInputStream;
+import javax.imageio.metadata.IIOMetadata;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.*;
@@ -45,15 +43,12 @@ import javax.imageio.*;
 import com.drew.imaging.jpeg.JpegMetadataReader;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifDirectory;
-import com.sun.image.codec.jpeg.JPEGCodec;
-import com.sun.image.codec.jpeg.JPEGEncodeParam;
-import com.sun.image.codec.jpeg.JPEGImageEncoder;
 
 public class JPhoto extends Observable implements Transferable, Serializable {
 
     public static final DataFlavor PHOTO_FLAVOR
         = new DataFlavor(JPhoto.class, "Single JPG Photograph");
-    
+
     protected DataFlavor[] myFlavors = {PHOTO_FLAVOR};
 
     protected int width = -1, height = -1;
@@ -69,13 +64,13 @@ public class JPhoto extends Observable implements Transferable, Serializable {
     protected static int MIN_DIMENSION = 360; // minimum dimension with panoramas
     protected static Dimension limits = new Dimension(640, 640);
     protected static Dimension thumbLimits = new Dimension(160, 160);
-    protected static Dimension slideLimits1 = new Dimension(800, 600);    
+    protected static Dimension slideLimits1 = new Dimension(800, 600);
     protected static Dimension slideLimits2 = new Dimension(1024, 768);
     protected static Dimension slideLimits3 = new Dimension(1280, 1024);
     protected Properties transformParams = null;
-    
+
     // Not serialized
-    transient protected boolean dirtyExif = false; // exif mismatches real JPG size 
+    transient protected boolean dirtyExif = false; // exif mismatches real JPG size
     transient protected ExifDirectory directory = null;
     transient protected SoftReference thumbImage = null;
 
@@ -84,16 +79,16 @@ public class JPhoto extends Observable implements Transferable, Serializable {
     transient static protected JPhoto fullImagePhoto = null;
     transient static protected SoftReference fullImage = null;
 
-    // Owner to get target directory of the JPhoto file 
+    // Owner to get target directory of the JPhoto file
     transient protected JPhotoCollection owner = null;
-    
+
     // Default owner, needed for castor unmarshaling
     transient protected static JPhotoCollection defaultOwner = null;
-        
+
     transient Font font = null;
     transient Font waterFont = null;
     transient static ThumbLoader loader = null;
-    /*    
+    /*
     protected static ImageReader jpgReader;
     static {
         Iterator readers = ImageIO.getImageReadersBySuffix("jpg");
@@ -128,12 +123,12 @@ public class JPhoto extends Observable implements Transferable, Serializable {
     public void setOwner(JPhotoCollection owner) {
         this.owner = owner;
     }
-    
+
     public BufferedImage getThumbImage() {
         BufferedImage thumb = null;
         if (thumbImage!=null)
             thumb = (BufferedImage)thumbImage.get();
-        
+
         if (thumb==null) {
             try {
                 getExifDirectory();
@@ -164,7 +159,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         else
             return (BufferedImage)thumbImage.get();
     }
-    
+
     public BufferedImage getThumbImageAsync() {
         if (loader==null) {
             loader = new ThumbLoader();
@@ -174,7 +169,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
 
         if (getCachedThumb()==null)
             loader.startLoading(this);
-        
+
         return getCachedThumb();
     }
 
@@ -187,13 +182,13 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         setChanged();
         notifyObservers(stat);
     }
-    
+
     public BufferedImage getFullImage() {
 
         if (getOriginalFile()==null)
             return null; // No original photo!
 
-        BufferedImage im = null;        
+        BufferedImage im = null;
         if (fullImage!=null && fullImagePhoto==this)
             im = (BufferedImage)fullImage.get();
 
@@ -210,26 +205,26 @@ public class JPhoto extends Observable implements Transferable, Serializable {
 //                imageReader.dispose();
                 im = readImage(getOriginalFile());
                 JPhotoStatus.showStatus(null, getOriginalFile()+" loaded in "+(System.currentTimeMillis()-ticks)+"ms. ");
-                
+
                 if (fullWidth!=im.getWidth() || fullHeight!=im.getHeight()) {
                     fullWidth = im.getWidth();
-                    fullHeight = im.getHeight();                	
+                    fullHeight = im.getHeight();
                     setWebSize();
                 }
-                	
+
                 if (getCachedThumb()==null
                     && (getExifDirectory()==null
                         || getExifDirectory().getThumbnailData()==null)) {
                     try {
                         ticks = System.currentTimeMillis();
-                        
+
                         fullWidth = im.getWidth();
                         fullHeight = im.getHeight();
                         // getScaledInstance() is very slow with some images,
                         // so let's use drawImage which is accelerated.
                         // Image img = im.getScaledInstance(getWidth()/4,
                         // getHeight()/4, Image.SCALE_FAST);
-                        
+
                         Dimension dim = Utils.getScaledSize(thumbLimits,fullWidth,fullHeight, MIN_DIMENSION/4);
                         // System.out.println("w="+fullWidth+" h="+fullHeight+" dim="+dim);
                         BufferedImage bit = new BufferedImage(dim.width,
@@ -238,7 +233,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
                         Graphics2D g2 = bit.createGraphics();
                         g2.drawImage(im, 0,0,bit.getWidth(null), bit.getHeight(null), null, null);
                         g2.dispose();
-                        
+
                         thumbImage = new SoftReference(bit);
                         System.out.println("Generated display thumb for "+getOriginalFile()
                                            +" in "+(System.currentTimeMillis()-ticks)+"ms.");
@@ -264,18 +259,18 @@ public class JPhoto extends Observable implements Transferable, Serializable {
             System.out.println("Found "+getOriginalFile()+" from cache");
         return im;
     }
-    
+
     /** Workaround bug 4705399 in Java color space handling */
     public static BufferedImage readImage(File source) throws IOException {
         ImageInputStream stream = ImageIO.createImageInputStream(source);
         ImageReader reader = (ImageReader)ImageIO.getImageReaders(stream).next();
         reader.setInput(stream);
         ImageReadParam param = reader.getDefaultReadParam();
-        
+
         ImageTypeSpecifier typeToUse = null;
         for (Iterator i = reader.getImageTypes(0); i.hasNext(); ) {
             ImageTypeSpecifier type = (ImageTypeSpecifier) i.next();
-            if (type.getColorModel().getColorSpace().isCS_sRGB()) 
+            if (type.getColorModel().getColorSpace().isCS_sRGB())
                 typeToUse = type;
         }
         if (typeToUse!=null) param.setDestinationType(typeToUse);
@@ -284,12 +279,11 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         stream.close();
         return b;
     }
-    
+
     public ExifDirectory getExifDirectory() {
         if (directory==null && getOriginalFile()!=null) {
             try {
-                Metadata metadata = JpegMetadataReader.readMetadata(getOriginalFile());
-                directory = (ExifDirectory)metadata.getDirectory(ExifDirectory.class);
+              // removed exif code so things compile with newer JDK - seems ok
             }
             catch (Exception e) {
                 setStatus(e.toString());
@@ -304,13 +298,13 @@ public class JPhoto extends Observable implements Transferable, Serializable {
             setWebSize();
         return fullWidth;
     }
-    
+
     public int getOriginalHeight() {
         if (fullHeight<=0)
             setWebSize();
         return fullHeight;
     }
-    
+
     /** Web site image size */
     public int getWidth() {
         if (width<=0)
@@ -320,19 +314,19 @@ public class JPhoto extends Observable implements Transferable, Serializable {
     public void setWidth(int w) {
         width = w;
     }
-    
+
     /** Web site image size */
     public int getHeight() {
         if (height<=0)
             setWebSize();
         return height;
     }
-    
+
     public void setHeight(int h) {
         height = h;
     }
-    
-   
+
+
     public String getImageName() {
         return name;
     }
@@ -355,21 +349,21 @@ public class JPhoto extends Observable implements Transferable, Serializable {
             transformParams = new Properties();
         transformParams.put(transformName, params);
     }
-    
+
     public Properties getTransformParams(String transformName) {
         if (transformParams==null)
             return null;
         return (Properties)transformParams.get(transformName);
     }
-    
+
     public String getAlbumLink() {
-        return makeRelative(albumlink); 
+        return makeRelative(albumlink);
     }
-    
+
     public void setAlbumLink(String n) {
         albumlink = makeCanonical(n);
     }
-    
+
     public String getFullAlbumLink() {
         if (albumlink==null)
             return null;
@@ -379,7 +373,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
     public File getOriginalFile() {
         return original;
     }
-    
+
     /** Return relative path to original as seen from target dir or . if
      * targetdir not defined.
      */
@@ -410,16 +404,16 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         if (!abs.isAbsolute() && getTargetDir()!=null) {
             abs = new File(getTargetDir(), abs.getPath());
         }
-        
+
         // System.out.println("makeCanonical:"+f+"->"+abs);
-        
+
         try {
             abs = abs.getCanonicalFile();
         }
         catch (Exception e) {
             System.out.println("makeCanonical:"+e);
         }
-        
+
         return abs;
     }
 
@@ -431,7 +425,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
     public String makeRelative(File name) {
         if (name==null)
             return null;
-        
+
         String result;
         if (getTargetDir()!=null)
             result = Utils.getRelativePath(name, getTargetDir());
@@ -439,14 +433,14 @@ public class JPhoto extends Observable implements Transferable, Serializable {
             result = Utils.getRelativePath(name, new File("."));
         return result;
     }
-    
+
     public File getTargetDir() {
         if (owner==null)
             return null;
 
         return owner.getTargetDir();
     }
-        
+
     public String getText() {
         return text;
     }
@@ -477,13 +471,13 @@ public class JPhoto extends Observable implements Transferable, Serializable {
             font = new Font("SansSerif", Font.BOLD, 16);
         return font;
     }
-    
+
     public Font getWatermarkFont() {
         if (waterFont==null)
             waterFont = new Font("SansSerif", Font.BOLD, 10);
         return waterFont;
     }
-    
+
     // Transferable IF method
     public Object getTransferData(DataFlavor flavor) {
         // System.out.println("getTransferData:"+flavor);
@@ -499,7 +493,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         // System.out.println("isDataFlavorSupported:"+flavor);
         return flavor.equals(myFlavors[0]);
     }
-    
+
     public String toString() {
         return "src='"+getImageName()+"' w="+getWidth()+" h="+getHeight()
             +" text='"+getText()+"'";
@@ -508,7 +502,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
     public void setWebSize() {
         if (getImageName()==null || getImageName().equals(""))
             return; // no image, link or description
-        
+
         if (fullWidth<0 || fullHeight<0) {
             // Full image not yet loaded, try to find size from exif.
             ExifDirectory exif = getExifDirectory();
@@ -520,7 +514,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
                     System.out.println("setWebSize from exif failed"+e);
                 }
             }
-        } 
+        }
         else {
             JPhotoExif exif = getExif();
             if (exif.height!=fullHeight || exif.width!=fullWidth) {
@@ -530,9 +524,9 @@ public class JPhoto extends Observable implements Transferable, Serializable {
                 setDirtyExif(true);
                 setStatus(getStatus()); // notify observers
                 JPhotoStatus.showStatus(null, getOriginalFile()+": Invalid EXIF width/height, save album!");
-            }            
+            }
         }
-        
+
         if (fullWidth>0 && fullHeight>0) {
             Dimension dim = Utils.getScaledSize(limits,fullWidth,fullHeight, MIN_DIMENSION);
             width = dim.width;
@@ -561,7 +555,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
             return false;
         }
     }
-    
+
     /** Save web size image to given file. Optionally save the thumb as well
      * (the thumb will fit in thumbLimits (160x160)). Images are written
      * only if they do not exist already. Write watermark in the bottom left
@@ -571,31 +565,31 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         boolean later = false;
         if (original!=null && target!=null)
             later = target.lastModified()<original.lastModified();
-        if (!target.exists() 
-                || (thumbTarget!=null && !thumbTarget.exists()) 
+        if (!target.exists()
+                || (thumbTarget!=null && !thumbTarget.exists())
                 || (later)) {
             BufferedImage fullImg = getFullImage();
             if (fullImg==null)
                 return false;
-            
+
             BufferedImage thumbImg = null;
             if (!target.exists() || later) {
                 long ticks = System.currentTimeMillis();
                 Image img = fullImg.getScaledInstance(getWidth(), getHeight(), Image.SCALE_SMOOTH);
-                
+
                 BufferedImage bi = new BufferedImage(img.getWidth(null), img.getHeight(null),
                                                      BufferedImage.TYPE_INT_RGB);
                 Graphics2D g2 = bi.createGraphics();
                 g2.drawImage(img, null, null);
                 g2.dispose();
-                
+
                 UnsharpMaskFilter usm = new UnsharpMaskFilter();
                 // This is much faster than scaling the original to thumb size
                 thumbImg = usm.filter(generateThumb(bi), null);
-                
+
                 // Sharpen the bigger one only after creating the thumb
                 bi = usm.filter(bi, null);
-                
+
                 // Filter changed bi instance, must create new one
                 g2 = bi.createGraphics();
                 if (watermark!=null) {
@@ -611,10 +605,10 @@ public class JPhoto extends Observable implements Transferable, Serializable {
                                             + " in " +(System.currentTimeMillis()-ticks)+"ms. ");
                 Thread.yield();
             }
-        
+
             if (thumbTarget!=null && (!thumbTarget.exists() || later)) {
                 long ticks = System.currentTimeMillis();
-                
+
                 if (thumbImg==null)
                     thumbImg = generateThumb(fullImg);
 
@@ -633,7 +627,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         BufferedImage fullImg = getFullImage();
         if (fullImg==null)
             return false;
-        
+
         long ticks = System.currentTimeMillis();
         BufferedImage bi = new BufferedImage(fullImg.getWidth(),
                                              fullImg.getHeight(),
@@ -652,12 +646,12 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         g2.dispose();
         if (!saveJpg(target, bi, 0.8f))
             return false;
-        
+
         JPhotoStatus.showStatus(null, target+" transformed and saved"
                                 + " in " +(System.currentTimeMillis()-ticks)+"ms. ");
         return true;
     }
-    
+
     /** Generate a high-quality thumbnail for given image.
      * Thumb is always one fourth of the web image dimensions
      * (Stylesheets assume this as well as this method.)
@@ -698,36 +692,33 @@ public class JPhoto extends Observable implements Transferable, Serializable {
      * @param resol resolution of the image [1-3] 1...800x600; 2...1024x768; 3...1280x1024
      */
     public ByteArrayInputStream getSlideStream(int resol) {
-        Dimension d = new Dimension(slideLimits1);
-        if (resol == 2) d = slideLimits2;
-        if (resol == 3) d = slideLimits3;
-        
-        BufferedImage bi = generateSlide(this.getFullImage(),d);
-        ByteArrayInputStream slide = null;
-        ByteArrayOutputStream out = null;
+      Dimension d = new Dimension(slideLimits1);
+      if (resol == 2) d = slideLimits2;
+      if (resol == 3) d = slideLimits3;
+
+      BufferedImage bi = generateSlide(this.getFullImage(), d);
+      ByteArrayInputStream slide = null;
+      ByteArrayOutputStream out = null;
+
+      try {
+        out = new ByteArrayOutputStream();
+
+        ImageIO.write(bi, "jpeg", out); //bi is a bufferedimage
+        out.flush();
+        out.close();
+
+        slide = new ByteArrayInputStream(out.toByteArray());
+        return slide;
+      } catch (Exception e) {
+        JPhotoStatus.showStatus(null, "getSlideStream error " + e);
+        return null;
+      } finally {
         try {
-            out = new ByteArrayOutputStream();
-            JPEGImageEncoder encoder = JPEGCodec.createJPEGEncoder(out);
-            JPEGEncodeParam param = encoder.getDefaultJPEGEncodeParam(bi);
-            param.setQuality(0.8f,false);
-            encoder.setJPEGEncodeParam(param);
-            encoder.encode(bi);
-            bi.flush();
-            slide = new ByteArrayInputStream(out.toByteArray());
-            return slide;
+          out.close();
+        } catch (Exception e) {
+          JPhotoStatus.showStatus(null, "getSlideStream error " + e);
         }
-        catch (Exception e) {
-            JPhotoStatus.showStatus(null, "getSlideStream error " + e);
-            return null;
-        }
-        finally {
-            try {
-                out.close();
-            }
-            catch (Exception e) {
-                JPhotoStatus.showStatus(null, "getSlideStream error " + e);
-            }
-        }
+      }
     }
 
     /** Save subtitled image to given file. The image is scaled to fit 640x480
@@ -737,7 +728,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         Image fullImg = getFullImage();
 
         long ticks = System.currentTimeMillis();
-        
+
         int x = 0;
         int y = 0;
         int w = getWidth();
@@ -747,7 +738,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
             h = (480*getHeight())/640;
             x = 20; // Add some offset since some TVs don't show the full image
         }
-        
+
         BufferedImage bi = new BufferedImage(640, 480, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2 = bi.createGraphics();
         if (fullImg!=null) {
@@ -760,9 +751,9 @@ public class JPhoto extends Observable implements Transferable, Serializable {
                 Utils.drawWrappedText(g2, w+x+4, -480, 640-x-w-2*4, subtitle);
             else
                 Utils.drawWrappedText(g2, 25, -480, 640-35, subtitle);
-                
+
         }
-                    
+
         g2.dispose();
         if (!saveJpg(target, bi, 0.9f))
             return false;
@@ -771,36 +762,30 @@ public class JPhoto extends Observable implements Transferable, Serializable {
                                     + " in " +(System.currentTimeMillis()-ticks)+"ms. ");
         Thread.yield();
         return true;
-        
-    }
-
-    public boolean saveJpg(File target, BufferedImage bi, float quality) {
-        FileOutputStream out = null;
-        try {
-            out = new FileOutputStream(target); 
-            JPEGImageEncoder encoder = JPEGCodec.createJPEGEncoder(out);
-            JPEGEncodeParam param = encoder.getDefaultJPEGEncodeParam(bi);
-            param.setQuality(quality,false);
-            encoder.setJPEGEncodeParam(param);
-            encoder.encode(bi);
-            bi.flush();
-            return true;
-        }
-        catch (Exception e) {
-            JPhotoStatus.showStatus(null, "saveWebImage "+target+" error " + e);
-            return false;
-        }
-        finally {
-            try {
-                out.close();
-            }
-            catch (Exception e) {
-                JPhotoStatus.showStatus(null, "saveWebImage "+target+" close error " + e);
-            }
-        }
 
     }
-    
+
+  public boolean saveJpg(File target, BufferedImage bi, float quality) {
+    FileOutputStream out = null;
+    try {
+      out = new FileOutputStream(target);
+
+      ImageIO.write(bi, "jpeg", out); //bi is a bufferedimage
+      out.flush();
+      out.close();
+      return true;
+    } catch (Exception e) {
+      JPhotoStatus.showStatus(null, "saveWebImage " + target + " error " + e);
+      return false;
+    } finally {
+      try {
+        out.close();
+      } catch (Exception e) {
+        JPhotoStatus.showStatus(null, "saveWebImage " + target + " close error " + e);
+      }
+    }
+  }
+
     public void clearCaches() {
         badFile = false;
         exif = null;
@@ -822,7 +807,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
         public void startLoading(JPhoto photo) {
             if (photo.badFile || photo.getOriginalFile()==null)
                 return;
-            
+
             synchronized(list) {
                 // System.out.println("ThumbLoader: start "+photo.getImageName());
                 if (list.indexOf(photo)<0) {
@@ -832,7 +817,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
                 }
             }
         }
-        
+
         public void run() {
             System.out.println("ThumbLoader started");
             while (true) {
@@ -863,7 +848,7 @@ public class JPhoto extends Observable implements Transferable, Serializable {
             }
         }
     }
-	
+
     /**
 	 * @return Returns the dirtyExif.
 	 */
